@@ -4,12 +4,13 @@ import { auth } from "@/lib/firebase";
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 export default function MainContent() {
-  const [view, setView] = useState("dashboard"); // 기본 화면을 대시보드로 변경할 수도 있습니다. (현재는 앱 켜면 대시보드가 먼저 보임)
+  const [view, setView] = useState("dashboard");
 
   const [user, setUser] = useState(null);
   const [question, setQuestion] = useState("");
   const [wrongSolution, setWrongSolution] = useState("");
   const [response, setResponse] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState([]);
 
@@ -28,14 +29,19 @@ export default function MainContent() {
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error("Login error:", e);
+    }
   };
 
   const handleAskAI = async (action) => {
     if (!question.trim()) return alert("Please enter a problem!");
     setLoading(true);
-    setResponse(""); 
-    
+    setResponse("");
+    setErrorMsg("");
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -43,16 +49,23 @@ export default function MainContent() {
         body: JSON.stringify({ question, wrongSolution, action }),
       });
       const data = await res.json();
-      setResponse(data.answer);
-    } catch (e) { 
-      setResponse("An error occurred. Please try again."); 
+
+      if (!res.ok) {
+        console.error("API error:", data);
+        setErrorMsg(data.error || "AI로부터 응답을 받지 못했습니다.");
+      } else {
+        setResponse(data.answer || "응답이 비어있습니다.");
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
+      setErrorMsg("네트워크 오류: " + e.message);
     }
     setLoading(false);
   };
 
   const handleSaveNote = () => {
     if (!question || !response) return alert("Both a problem and an AI response are required to save.");
-    
+
     const newNote = {
       id: Date.now(),
       question,
@@ -60,17 +73,17 @@ export default function MainContent() {
       response,
       date: new Date().toLocaleString(),
     };
-    
+
     const updatedNotes = [newNote, ...notes];
     setNotes(updatedNotes);
     localStorage.setItem("wrongNotes", JSON.stringify(updatedNotes));
-    
+
     setView("notes");
   };
 
   const handleDeleteNote = (e, id) => {
-    e.stopPropagation(); 
-    const updatedNotes = notes.filter(note => note.id !== id);
+    e.stopPropagation();
+    const updatedNotes = notes.filter((note) => note.id !== id);
     setNotes(updatedNotes);
     localStorage.setItem("wrongNotes", JSON.stringify(updatedNotes));
   };
@@ -79,6 +92,7 @@ export default function MainContent() {
     setQuestion(note.question);
     setWrongSolution(note.wrongSolution || "");
     setResponse(note.response);
+    setErrorMsg("");
     setView("home");
   };
 
@@ -87,13 +101,13 @@ export default function MainContent() {
       alert("You need at least one saved note to generate a review question!");
       return;
     }
-    
+
     setView("review");
     setIsReviewLoading(true);
     setReviewQuestion("");
     setUserReviewAnswer("");
     setReviewFeedback("");
-    
+
     const randomNote = notes[Math.floor(Math.random() * notes.length)];
     setReviewProblem(randomNote);
 
@@ -101,38 +115,52 @@ export default function MainContent() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          question: `Create a similar but slightly different practice problem to test my understanding of this topic. Provide ONLY the new problem text. DO NOT provide the solution yet.\n\nOriginal problem concept: ${randomNote.question}`, 
-          wrongSolution: "", 
-          action: "solve" 
+        body: JSON.stringify({
+          question: `Create a similar but slightly different practice problem to test my understanding of this topic. Provide ONLY the new problem text. DO NOT provide the solution yet.\n\nOriginal problem concept: ${randomNote.question}`,
+          wrongSolution: "",
+          action: "solve",
         }),
       });
       const data = await res.json();
-      setReviewQuestion(data.answer);
-    } catch (e) { 
-      setReviewQuestion("Failed to generate a review question. Please try again."); 
+
+      if (!res.ok) {
+        console.error("API error:", data);
+        setReviewQuestion("문제 생성 실패: " + (data.error || "알 수 없는 오류"));
+      } else {
+        setReviewQuestion(data.answer || "생성된 문제가 비어있습니다.");
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
+      setReviewQuestion("Failed to generate a review question. Please try again.");
     }
     setIsReviewLoading(false);
   };
 
   const handleSubmitReviewAnswer = async () => {
     if (!userReviewAnswer.trim()) return alert("Please enter your answer first!");
-    
+
     setIsReviewLoading(true);
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          question: `Practice Problem: ${reviewQuestion}\n\nMy Answer: ${userReviewAnswer}\n\nPlease evaluate my answer, let me know if it is correct or incorrect, and provide the correct step-by-step solution.`, 
-          wrongSolution: "", 
-          action: "analyze" 
+        body: JSON.stringify({
+          question: `Practice Problem: ${reviewQuestion}\n\nMy Answer: ${userReviewAnswer}\n\nPlease evaluate my answer, let me know if it is correct or incorrect, and provide the correct step-by-step solution.`,
+          wrongSolution: "",
+          action: "analyze",
         }),
       });
       const data = await res.json();
-      setReviewFeedback(data.answer);
-    } catch (e) { 
-      setReviewFeedback("Failed to evaluate your answer. Please try again."); 
+
+      if (!res.ok) {
+        console.error("API error:", data);
+        setReviewFeedback("평가 실패: " + (data.error || "알 수 없는 오류"));
+      } else {
+        setReviewFeedback(data.answer || "평가 결과가 비어있습니다.");
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
+      setReviewFeedback("Failed to evaluate your answer. Please try again.");
     }
     setIsReviewLoading(false);
   };
@@ -140,14 +168,13 @@ export default function MainContent() {
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 p-6 md:p-12 font-sans">
       <div className="max-w-4xl mx-auto">
-        
         {/* 네비게이션 헤더 */}
         <nav className="flex flex-col sm:flex-row justify-between items-center mb-10 pb-6 border-b border-gray-800 gap-4">
           <div className="cursor-pointer" onClick={() => setView("dashboard")}>
             <h1 className="text-3xl font-extrabold text-white tracking-tight hover:text-blue-400 transition-colors">AcePrep AI</h1>
             <p className="text-gray-400 text-sm mt-1">Your smart study notes</p>
           </div>
-          
+
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button onClick={() => setView("dashboard")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${view === "dashboard" ? "bg-green-600 text-white" : "bg-gray-800 hover:bg-gray-700 text-gray-300"}`}>📊 Dashboard</button>
             <button onClick={() => setView("home")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${view === "home" ? "bg-blue-600 text-white" : "bg-gray-800 hover:bg-gray-700 text-gray-300"}`}>✏️ Study</button>
@@ -162,14 +189,13 @@ export default function MainContent() {
           </div>
         </nav>
 
-        {/* 0. 대시보드 화면 (통계 및 요약) */}
+        {/* 0. 대시보드 화면 */}
         {view === "dashboard" && (
           <div className="animate-in fade-in zoom-in-95 duration-500 space-y-8">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              <span>📊</span> Welcome back{user ? `, ${user.displayName.split(' ')[0]}` : ""}!
+              <span>📊</span> Welcome back{user ? `, ${user.displayName.split(" ")[0]}` : ""}!
             </h2>
-            
-            {/* 핵심 지표 카드 */}
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="bg-gray-900 p-6 rounded-3xl border border-gray-800 shadow-lg flex flex-col justify-center items-center text-center hover:border-green-500 transition-colors">
                 <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Notes</p>
@@ -185,13 +211,12 @@ export default function MainContent() {
               </div>
             </div>
 
-            {/* 최근 학습한 문제 요약 */}
             <div className="bg-gray-900 rounded-3xl border border-gray-800 p-8 shadow-xl">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-gray-200">Recent Activity</h3>
                 <button onClick={() => setView("notes")} className="text-blue-500 text-sm font-bold hover:underline">View All →</button>
               </div>
-              
+
               {notes.length === 0 ? (
                 <div className="text-center py-10 text-gray-500">
                   <p>No activity yet.</p>
@@ -202,7 +227,7 @@ export default function MainContent() {
                   {notes.slice(0, 3).map((note, idx) => (
                     <div key={idx} className="bg-gray-800 p-4 rounded-xl border border-gray-700 flex justify-between items-center">
                       <p className="text-gray-300 font-medium truncate pr-4">{note.question}</p>
-                      <span className="text-xs text-gray-500 whitespace-nowrap">{note.date.split(',')[0]}</span>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{note.date.split(",")[0]}</span>
                     </div>
                   ))}
                 </div>
@@ -211,7 +236,7 @@ export default function MainContent() {
           </div>
         )}
 
-        {/* 1. 홈 화면 (새로운 문제 풀이) */}
+        {/* 1. 홈 화면 */}
         {view === "home" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="space-y-4">
@@ -228,6 +253,13 @@ export default function MainContent() {
               <button onClick={() => handleAskAI("solve")} disabled={loading} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg shadow-blue-900/20">{loading ? "AI is thinking..." : "Solve"}</button>
               <button onClick={() => handleAskAI("analyze")} disabled={loading} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg shadow-purple-900/20">{loading ? "Analyzing..." : "Analyze"}</button>
             </div>
+
+            {errorMsg && (
+              <div className="mt-6 bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-xl">
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
             {response && (
               <div className="mt-10 animate-in slide-in-from-bottom-4 fade-in duration-500">
                 <div className="flex justify-between items-center mb-4">
@@ -286,19 +318,19 @@ export default function MainContent() {
                       </div>
                     </div>
                   )}
-                  
+
                   {!reviewFeedback && reviewQuestion && (
                     <div className="mt-8 space-y-4 animate-in fade-in duration-500">
                       <label className="text-sm font-semibold text-purple-300">Your Answer</label>
-                      <textarea 
-                        className="w-full h-32 bg-gray-800 text-white p-5 rounded-2xl border border-gray-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-none shadow-inner" 
-                        placeholder="Solve the problem and type your answer/steps here..." 
-                        value={userReviewAnswer} 
-                        onChange={(e) => setUserReviewAnswer(e.target.value)} 
+                      <textarea
+                        className="w-full h-32 bg-gray-800 text-white p-5 rounded-2xl border border-gray-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-none shadow-inner"
+                        placeholder="Solve the problem and type your answer/steps here..."
+                        value={userReviewAnswer}
+                        onChange={(e) => setUserReviewAnswer(e.target.value)}
                         disabled={isReviewLoading}
                       />
-                      <button 
-                        onClick={handleSubmitReviewAnswer} 
+                      <button
+                        onClick={handleSubmitReviewAnswer}
                         disabled={isReviewLoading}
                         className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 text-white py-4 rounded-xl font-bold text-lg transition-colors shadow-lg shadow-purple-900/20"
                       >
@@ -326,7 +358,6 @@ export default function MainContent() {
             </div>
           </div>
         )}
-
       </div>
     </main>
   );
