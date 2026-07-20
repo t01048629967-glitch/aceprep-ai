@@ -180,6 +180,7 @@ export default function MainContent() {
             <button onClick={() => setView("home")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${view === "home" ? "bg-blue-600 text-white" : "bg-gray-800 hover:bg-gray-700 text-gray-300"}`}>✏️ Study</button>
             <button onClick={() => setView("notes")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${view === "notes" ? "bg-blue-600 text-white" : "bg-gray-800 hover:bg-gray-700 text-gray-300"}`}>📚 My Notes</button>
             <button onClick={handleGenerateReview} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${view === "review" ? "bg-purple-600 text-white" : "bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 border border-purple-800/50"}`}>🎯 Daily Review</button>
+<a href="/concepts" className="px-4 py-2 rounded-lg text-sm font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">📖 Concepts</a>
 
             {user ? (
               <button onClick={() => signOut(auth)} className="bg-red-900/50 hover:bg-red-800 text-red-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-red-800/50 ml-2">Logout</button>

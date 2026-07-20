@@ -12,9 +12,8 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Firebase 앱 인스턴스 가져오기 (이미 초기화되어 있다면 가져오고, 아니면 새로 생성)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Next.js는 하나의 서버에서 여러 번 초기화될 수 있어서, 이미 초기화됐으면 재사용
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Auth와 Firestore 내보내기
 export const auth = getAuth(app);
 export const db = getFirestore(app);
